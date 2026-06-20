@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useApp } from './context/AppContext'
-import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { TimerPage } from './pages/TimerPage'
 import { GoalsPage } from './pages/GoalsPage'
@@ -11,7 +10,6 @@ import { LogOut, Clock, AlertTriangle } from 'lucide-react'
 
 function AppShell() {
   const [tab, setTab] = useState('dashboard')
-  const { user, signOut } = useAuth()
   const { activeTimers } = useApp()
 
   const pages = {
@@ -42,14 +40,8 @@ function AppShell() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-surface-500 hidden sm:block">{user?.email}</span>
-          <button
-            onClick={signOut}
-            className="p-1.5 rounded-lg text-surface-500 hover:text-surface-200 hover:bg-surface-700 transition-all"
-          >
-            <LogOut size={16} />
-          </button>
+        <div className="flex items-center gap-1.5 text-xs text-surface-500">
+          <span className="hidden sm:block">Life Tracker</span>
         </div>
       </header>
 
@@ -98,7 +90,6 @@ export default function App() {
   const { user, loading, configError } = useAuth()
 
   if (configError) return <ConfigErrorScreen />
-  if (loading) return <LoadingScreen />
-  if (!user) return <AuthPage />
+  if (loading || !user) return <LoadingScreen />
   return <AppShell />
 }
