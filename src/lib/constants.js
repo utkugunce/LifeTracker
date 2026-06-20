@@ -1,0 +1,48 @@
+export const PRESET_ACTIVITIES = [
+  { name: 'Ev İşleri', emoji: '🏠', category: 'home' },
+  { name: 'Bulaşık Yıkama', emoji: '🍽️', category: 'home' },
+  { name: 'Temizlik', emoji: '🧹', category: 'home' },
+  { name: 'Yemek Pişirme', emoji: '🍳', category: 'home' },
+  { name: 'Çalışma', emoji: '💼', category: 'work' },
+  { name: 'Toplantı', emoji: '📊', category: 'work' },
+  { name: 'E-posta', emoji: '📧', category: 'work' },
+  { name: 'Proje', emoji: '🎯', category: 'work' },
+  { name: 'Spor', emoji: '🏋️', category: 'health' },
+  { name: 'Koşu', emoji: '🏃', category: 'health' },
+  { name: 'Yoga', emoji: '🧘', category: 'health' },
+  { name: 'Yürüyüş', emoji: '🚶', category: 'health' },
+  { name: 'Kitap Okuma', emoji: '📚', category: 'learning' },
+  { name: 'Ders Çalışma', emoji: '📖', category: 'learning' },
+  { name: 'Online Kurs', emoji: '💻', category: 'learning' },
+  { name: 'Sosyal Medya', emoji: '📱', category: 'leisure' },
+  { name: 'Film/Dizi', emoji: '🎬', category: 'leisure' },
+  { name: 'Oyun', emoji: '🎮', category: 'leisure' },
+  { name: 'Müzik Dinleme', emoji: '🎵', category: 'leisure' },
+  { name: 'Kişisel Bakım', emoji: '💆', category: 'personal' },
+  { name: 'Uyku', emoji: '😴', category: 'personal' },
+  { name: 'Meditasyon', emoji: '🧠', category: 'personal' },
+  { name: 'Aile Vakti', emoji: '👨‍👩‍👧', category: 'social' },
+  { name: 'Arkadaşlar', emoji: '👥', category: 'social' },
+  { name: 'Alışveriş', emoji: '🛒', category: 'errands' },
+  { name: 'Ulaşım', emoji: '🚗', category: 'errands' },
+]
+
+export const MOOD_OPTIONS = [
+  { value: 1, emoji: '😫', label: 'Çok Kötü' },
+  { value: 2, emoji: '😞', label: 'Kötü' },
+  { value: 3, emoji: '😐', label: 'Orta' },
+  { value: 4, emoji: '😊', label: 'İyi' },
+  { value: 5, emoji: '😄', label: 'Harika' },
+]
+
+export const CATEGORY_COLORS = {
+  home: '#f59e0b',
+  work: '#3b82f6',
+  health: '#10b981',
+  learning: '#8b5cf6',
+  leisure: '#ec4899',
+  personal: '#06b6d4',
+  social: '#f97316',
+  errands: '#6b7280',
+  custom: '#0ea5e9',
+}
