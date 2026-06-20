@@ -1,17 +1,14 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, Target, AlertTriangle, CheckCircle2, Trash2,
-  TrendingUp, ShieldAlert, Calendar, Clock,
+  TrendingUp, ShieldAlert, Calendar, Clock, X,
 } from 'lucide-react'
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from 'date-fns'
+import { startOfWeek, startOfMonth, parseISO, isWithinInterval, endOfWeek, endOfMonth } from 'date-fns'
 import { useApp } from '../context/AppContext'
 import { Modal } from '../components/ui/Modal'
-import { Input } from '../components/ui/Input'
 import { ActivitySearch } from '../components/ui/ActivitySearch'
 import { formatDuration } from '../lib/utils'
 import { PRESET_ACTIVITIES, CATEGORY_COLORS } from '../lib/constants'
-
-// ── helpers ────────────────────────────────────────────────
 
 function getActivityMeta(name) {
   const preset = PRESET_ACTIVITIES.find(p => p.name.toLowerCase() === name?.toLowerCase())
@@ -23,24 +20,29 @@ function getActivityMeta(name) {
 
 function calcProgress(goal, logs) {
   const now = new Date()
-  const { start, end } = goal.period === 'weekly'
-    ? { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) }
-    : { start: startOfMonth(now), end: endOfMonth(now) }
+  const isWeekly = goal.period === 'weekly'
+  const start = isWeekly ? startOfWeek(now, { weekStartsOn: 1 }) : startOfMonth(now)
+  const end = isWeekly ? endOfWeek(now, { weekStartsOn: 1 }) : endOfMonth(now)
 
   const spent = logs
     .filter(l => {
       if (l.activity_id !== goal.activity_id) return false
-      try { const d = parseISO(l.log_date); return d >= start && d <= end } catch { return false }
+      try {
+        const d = parseISO(l.log_date)
+        return isWithinInterval(d, { start, end })
+      } catch {
+        return false
+      }
     })
     .reduce((s, l) => s + (l.duration_minutes || 0), 0)
 
   const target = goal.target_minutes
-  const pct = Math.min(100, Math.round((spent / target) * 100))
+  const ratio = target > 0 ? spent / target : 0
+  const pct = Math.min(100, Math.round(ratio * 100))
   const isLimit = goal.type === 'limit'
   const exceeded = isLimit && spent > target
   const achieved = !isLimit && spent >= target
 
-  // bar color
   let barColor
   if (isLimit) {
     barColor = exceeded ? '#ef4444' : pct >= 80 ? '#f59e0b' : '#10b981'
@@ -51,23 +53,17 @@ function calcProgress(goal, logs) {
   return { spent, target, pct, isLimit, exceeded, achieved, barColor }
 }
 
-// ── GoalCard ───────────────────────────────────────────────
-
 function GoalCard({ goal, logs, onDelete }) {
   const { spent, target, pct, isLimit, exceeded, achieved, barColor } = calcProgress(goal, logs)
   const name = goal.activities?.name ?? 'Bilinmiyor'
   const { emoji, color } = getActivityMeta(name)
-
   const remaining = target - spent
-  const overBy = spent - target
 
   return (
     <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
-      {/* colored top accent bar */}
       <div className="h-0.5 w-full" style={{ backgroundColor: barColor }} />
 
       <div className="p-4">
-        {/* row 1: icon + name + badges + trash */}
         <div className="flex items-start gap-3">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
@@ -95,14 +91,13 @@ function GoalCard({ goal, logs, onDelete }) {
           </div>
 
           <button
-            onClick={() => onDelete(goal.id)}
+            onClick={() => onDelete(goal)}
             className="p-1.5 rounded-lg text-surface-600 hover:text-red-400 hover:bg-red-500/10 transition-all shrink-0 mt-0.5"
           >
             <Trash2 size={14} />
           </button>
         </div>
 
-        {/* row 2: progress numbers */}
         <div className="flex items-end justify-between mt-4 mb-2">
           <div>
             <span className="text-2xl font-bold text-white">{formatDuration(spent)}</span>
@@ -113,7 +108,6 @@ function GoalCard({ goal, logs, onDelete }) {
           </span>
         </div>
 
-        {/* progress bar */}
         <div className="h-2.5 bg-surface-700 rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700"
@@ -121,18 +115,17 @@ function GoalCard({ goal, logs, onDelete }) {
           />
         </div>
 
-        {/* row 3: status message */}
         <div className="mt-2.5">
           {exceeded && (
             <div className="flex items-center gap-1.5 text-red-400 text-xs font-medium">
               <AlertTriangle size={12} />
-              Limiti {formatDuration(overBy)} aştınız!
+              Limiti {formatDuration(spent - target)} aştınız!
             </div>
           )}
           {achieved && !isLimit && (
             <div className="flex items-center gap-1.5 text-green-400 text-xs font-medium">
               <CheckCircle2 size={12} />
-              Hedef tamamlandı! 🎉
+              Hedef tamamlandı!
             </div>
           )}
           {!exceeded && !achieved && (
@@ -149,15 +142,13 @@ function GoalCard({ goal, logs, onDelete }) {
   )
 }
 
-// ── Summary strip ──────────────────────────────────────────
-
 function SummaryStrip({ goals, logs }) {
   const stats = useMemo(() => {
     let achieved = 0, exceeded = 0
     goals.forEach(g => {
-      const { isLimit, exceeded: exc, achieved: ach } = calcProgress(g, logs)
-      if (ach && !isLimit) achieved++
-      if (exc && isLimit) exceeded++
+      const p = calcProgress(g, logs)
+      if (p.achieved && !p.isLimit) achieved++
+      if (p.exceeded && p.isLimit) exceeded++
     })
     return { achieved, exceeded, total: goals.length }
   }, [goals, logs])
@@ -182,7 +173,42 @@ function SummaryStrip({ goals, logs }) {
   )
 }
 
-// ── Add Goal Modal ─────────────────────────────────────────
+function DeleteConfirmModal({ open, goal, onConfirm, onClose }) {
+  if (!open || !goal) return null
+  const name = goal.activities?.name ?? 'Bilinmiyor'
+  const { emoji } = getActivityMeta(name)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-surface-800 border border-surface-700 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm p-6">
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-2xl bg-red-500/15 border border-red-500/25 flex items-center justify-center mx-auto mb-4">
+            <Trash2 size={24} className="text-red-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white mb-1">Hedefi Sil</h3>
+          <p className="text-sm text-surface-400">
+            <span className="text-white font-medium">{emoji} {name}</span> hedefini silmek istediğinize emin misiniz?
+          </p>
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-surface-300 bg-surface-700 hover:bg-surface-600 transition-all"
+          >
+            Vazgeç
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-red-500 hover:bg-red-600 transition-all active:scale-[0.98]"
+          >
+            Sil
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const EMPTY_FORM = { activity: '', type: 'target', targetMinutes: '', period: 'weekly' }
 
@@ -217,8 +243,6 @@ function AddGoalModal({ open, onClose, onSave }) {
   return (
     <Modal open={open} onClose={handleClose} title="Yeni Hedef / Limit">
       <form onSubmit={handleSubmit} className="space-y-5">
-
-        {/* Activity */}
         <div>
           <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Aktivite</p>
           <ActivitySearch
@@ -228,7 +252,6 @@ function AddGoalModal({ open, onClose, onSave }) {
           />
         </div>
 
-        {/* Type toggle */}
         <div>
           <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Tür</p>
           <div className="grid grid-cols-2 gap-2">
@@ -270,13 +293,12 @@ function AddGoalModal({ open, onClose, onSave }) {
           </div>
         </div>
 
-        {/* Period toggle */}
         <div>
           <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Periyot</p>
           <div className="flex bg-surface-700 rounded-xl p-1">
             {[
-              { value: 'weekly', label: '📅 Haftalık' },
-              { value: 'monthly', label: '🗓️ Aylık' },
+              { value: 'weekly', label: 'Haftalık' },
+              { value: 'monthly', label: 'Aylık' },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -294,13 +316,13 @@ function AddGoalModal({ open, onClose, onSave }) {
           </div>
         </div>
 
-        {/* Duration */}
         <div>
           <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Süre Hedefi</p>
           <div className="relative">
             <input
               type="number"
               min={1}
+              inputMode="numeric"
               placeholder="örn. 120"
               value={form.targetMinutes}
               onChange={e => set('targetMinutes', e.target.value)}
@@ -317,7 +339,6 @@ function AddGoalModal({ open, onClose, onSave }) {
           )}
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3 pt-1">
           <button
             type="button"
@@ -343,21 +364,24 @@ function AddGoalModal({ open, onClose, onSave }) {
   )
 }
 
-// ── GoalsPage ──────────────────────────────────────────────
-
 export function GoalsPage() {
   const { goals, logs, addGoal, deleteGoal } = useApp()
   const [adding, setAdding] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
 
   const targets = goals.filter(g => g.type === 'target')
   const limits = goals.filter(g => g.type === 'limit')
 
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    await deleteGoal(deleteTarget.id)
+    setDeleteTarget(null)
+  }
+
   return (
     <div className="space-y-5">
-
-      {/* header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Hedefler & Limitler</h1>
+        <h2 className="text-lg font-bold text-white">Hedefler & Limitler</h2>
         <button
           onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
@@ -372,7 +396,6 @@ export function GoalsPage() {
       </div>
 
       {goals.length === 0 ? (
-        /* empty state */
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <div className="w-20 h-20 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-5">
             <Target size={36} className="text-surface-600" />
@@ -391,38 +414,35 @@ export function GoalsPage() {
         </div>
       ) : (
         <>
-          {/* summary */}
           <SummaryStrip goals={goals} logs={logs} />
 
-          {/* targets */}
           {targets.length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <TrendingUp size={13} className="text-green-400" />
-                <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
+                <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
                   Minimum Hedefler ({targets.length})
-                </h2>
+                </h3>
               </div>
               <div className="space-y-3">
                 {targets.map(g => (
-                  <GoalCard key={g.id} goal={g} logs={logs} onDelete={deleteGoal} />
+                  <GoalCard key={g.id} goal={g} logs={logs} onDelete={setDeleteTarget} />
                 ))}
               </div>
             </section>
           )}
 
-          {/* limits */}
           {limits.length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <ShieldAlert size={13} className="text-orange-400" />
-                <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
+                <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
                   Maksimum Limitler ({limits.length})
-                </h2>
+                </h3>
               </div>
               <div className="space-y-3">
                 {limits.map(g => (
-                  <GoalCard key={g.id} goal={g} logs={logs} onDelete={deleteGoal} />
+                  <GoalCard key={g.id} goal={g} logs={logs} onDelete={setDeleteTarget} />
                 ))}
               </div>
             </section>
@@ -431,6 +451,12 @@ export function GoalsPage() {
       )}
 
       <AddGoalModal open={adding} onClose={() => setAdding(false)} onSave={addGoal} />
+      <DeleteConfirmModal
+        open={!!deleteTarget}
+        goal={deleteTarget}
+        onConfirm={confirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   )
 }

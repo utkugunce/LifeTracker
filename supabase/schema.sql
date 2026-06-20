@@ -13,9 +13,7 @@ CREATE TABLE IF NOT EXISTS activities (
   id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   name        TEXT NOT NULL,
-  emoji       TEXT NOT NULL DEFAULT '📌',
-  category    TEXT NOT NULL DEFAULT 'günlük',
-  is_preset   BOOLEAN NOT NULL DEFAULT FALSE,
+  is_custom   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -88,37 +86,33 @@ CREATE POLICY "Users can manage own goals"
 CREATE OR REPLACE FUNCTION public.seed_preset_activities()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
 BEGIN
-  INSERT INTO public.activities (user_id, name, emoji, category, is_preset)
-  SELECT NEW.id, name, emoji, category, true
-  FROM (VALUES
-    ('Uyku', '😴', 'sağlık'),
-    ('Egzersiz', '🏋️', 'spor'),
-    ('Koşu', '🏃', 'spor'),
-    ('Yürüyüş', '🚶', 'spor'),
-    ('Bisiklet', '🚴', 'spor'),
-    ('Yüzme', '🏊', 'spor'),
-    ('Yoga', '🧘', 'sağlık'),
-    ('Meditasyon', '🧘‍♂️', 'sağlık'),
-    ('Okuma', '📚', 'kişisel gelişim'),
-    ('Çalışma', '💼', 'iş'),
-    ('Kodlama', '💻', 'iş'),
-    ('Toplantı', '🤝', 'iş'),
-    ('Yemek Yapma', '🍳', 'ev'),
-    ('Temizlik', '🧹', 'ev'),
-    ('Alışveriş', '🛒', 'ev'),
-    ('Sosyal Medya', '📱', 'eğlence'),
-    ('Oyun', '🎮', 'eğlence'),
-    ('Film/Dizi', '🎬', 'eğlence'),
-    ('Müzik', '🎵', 'eğlence'),
-    ('Arkadaşlar', '👥', 'sosyal'),
-    ('Aile', '👨‍👩‍👧‍👦', 'sosyal'),
-    ('Dil Öğrenme', '🌍', 'kişisel gelişim'),
-    ('Günlük Yazma', '📝', 'kişisel gelişim'),
-    ('Kahve/Çay', '☕', 'günlük'),
-    ('Ulaşım', '🚗', 'günlük'),
-    ('Hobi', '🎨', 'eğlence')
-  ) AS preset(name, emoji, category)
-  ON CONFLICT DO NOTHING;
+  INSERT INTO public.activities (user_id, name, is_custom) VALUES
+    (NEW.id, 'Ev İşleri', false),
+    (NEW.id, 'Bulaşık Yıkama', false),
+    (NEW.id, 'Temizlik', false),
+    (NEW.id, 'Yemek Pişirme', false),
+    (NEW.id, 'Çalışma', false),
+    (NEW.id, 'Toplantı', false),
+    (NEW.id, 'E-posta', false),
+    (NEW.id, 'Proje', false),
+    (NEW.id, 'Spor', false),
+    (NEW.id, 'Koşu', false),
+    (NEW.id, 'Yoga', false),
+    (NEW.id, 'Yürüyüş', false),
+    (NEW.id, 'Kitap Okuma', false),
+    (NEW.id, 'Ders Çalışma', false),
+    (NEW.id, 'Online Kurs', false),
+    (NEW.id, 'Sosyal Medya', false),
+    (NEW.id, 'Film/Dizi', false),
+    (NEW.id, 'Oyun', false),
+    (NEW.id, 'Müzik Dinleme', false),
+    (NEW.id, 'Kişisel Bakım', false),
+    (NEW.id, 'Uyku', false),
+    (NEW.id, 'Meditasyon', false),
+    (NEW.id, 'Aile Vakti', false),
+    (NEW.id, 'Arkadaşlar', false),
+    (NEW.id, 'Alışveriş', false),
+    (NEW.id, 'Ulaşım', false);
   RETURN NEW;
 END;
 $$;
