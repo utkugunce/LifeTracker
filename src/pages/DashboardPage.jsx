@@ -1,151 +1,209 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Zap } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock, Flame, CalendarDays } from 'lucide-react'
 import { format, addDays, subDays, parseISO } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { useApp } from '../context/AppContext'
 import { ActiveTimers } from '../components/timer/ActiveTimer'
 import { LogCard } from '../components/logs/LogCard'
-import { Card, CardContent } from '../components/ui/Card'
 import { formatDuration, todayString } from '../lib/utils'
-import { CATEGORY_COLORS, PRESET_ACTIVITIES } from '../lib/constants'
+import { CATEGORY_COLORS, PRESET_ACTIVITIES, MOOD_OPTIONS } from '../lib/constants'
 
 function getColor(name) {
   const preset = PRESET_ACTIVITIES.find(p => p.name.toLowerCase() === name?.toLowerCase())
   return CATEGORY_COLORS[preset?.category] ?? CATEGORY_COLORS.custom
 }
 
+function getMoodEmoji(value) {
+  return MOOD_OPTIONS.find(m => m.value === value)?.emoji ?? ''
+}
+
 export function DashboardPage() {
   const { selectedDate, setSelectedDate, logsForDate, activeTimers } = useApp()
-  const logs = logsForDate(selectedDate)
   const today = todayString()
+  const isToday = selectedDate === today
+  const logs = logsForDate(selectedDate)
 
   const totalMinutes = logs.reduce((sum, l) => sum + (l.duration_minutes || 0), 0)
+  const moodLogs = logs.filter(l => l.mood)
+  const avgMood = moodLogs.length
+    ? Math.round(moodLogs.reduce((s, l) => s + l.mood, 0) / moodLogs.length)
+    : null
 
-  function changeDate(direction) {
+  const activityTotals = logs.reduce((acc, l) => {
+    const name = l.activities?.name ?? 'Bilinmiyor'
+    acc[name] = (acc[name] || 0) + (l.duration_minutes || 0)
+    return acc
+  }, {})
+
+  function changeDate(dir) {
     const d = parseISO(selectedDate)
-    const next = direction === 'next' ? addDays(d, 1) : subDays(d, 1)
+    const next = dir === 'next' ? addDays(d, 1) : subDays(d, 1)
     if (format(next, 'yyyy-MM-dd') > today) return
     setSelectedDate(format(next, 'yyyy-MM-dd'))
   }
 
-  const isToday = selectedDate === today
   const dateLabel = isToday
     ? 'Bugün'
     : format(parseISO(selectedDate), 'EEEE, d MMMM', { locale: tr })
 
-  // Aggregate by activity for summary
-  const activityTotals = logs.reduce((acc, log) => {
-    const name = log.activities?.name ?? 'Bilinmiyor'
-    if (!acc[name]) acc[name] = 0
-    acc[name] += log.duration_minutes || 0
-    return acc
-  }, {})
+  const hours = Math.floor(totalMinutes / 60)
+  const mins = totalMinutes % 60
 
   return (
     <div className="space-y-4">
-      {/* Date Navigator */}
-      <div className="flex items-center justify-between">
+
+      {/* ── Date navigator ────────────────────────────── */}
+      <div className="flex items-center gap-2">
         <button
           onClick={() => changeDate('prev')}
-          className="p-2 rounded-xl hover:bg-surface-700 text-surface-400 hover:text-white transition-all"
+          className="p-2 rounded-xl text-surface-400 hover:text-white hover:bg-surface-700 transition-all active:scale-90"
         >
           <ChevronLeft size={20} />
         </button>
-        <div className="text-center">
-          <h1 className="font-semibold text-white text-lg capitalize">{dateLabel}</h1>
+
+        <div className="flex-1 flex items-center justify-center gap-2 min-w-0">
+          <CalendarDays size={14} className="text-surface-500 shrink-0" />
+          <span className="font-semibold text-white text-base capitalize truncate">{dateLabel}</span>
           {!isToday && (
-            <button onClick={() => setSelectedDate(today)} className="text-xs text-primary-400 hover:text-primary-300">
-              Bugüne dön
+            <button
+              onClick={() => setSelectedDate(today)}
+              className="shrink-0 text-xs text-primary-400 bg-primary-500/15 px-2 py-0.5 rounded-full hover:bg-primary-500/25 transition-colors"
+            >
+              Bugün
             </button>
           )}
         </div>
+
         <button
           onClick={() => changeDate('next')}
           disabled={isToday}
-          className="p-2 rounded-xl hover:bg-surface-700 text-surface-400 hover:text-white transition-all disabled:opacity-30"
+          className="p-2 rounded-xl text-surface-400 hover:text-white hover:bg-surface-700 transition-all active:scale-90 disabled:opacity-20 disabled:pointer-events-none"
         >
           <ChevronRight size={20} />
         </button>
       </div>
 
-      {/* Stats Row */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Clock size={16} className="text-primary-400" />
-              <span className="text-xs text-surface-400 font-medium">Toplam Süre</span>
-            </div>
-            <p className="text-2xl font-bold text-white">{formatDuration(totalMinutes)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Zap size={16} className="text-yellow-400" />
-              <span className="text-xs text-surface-400 font-medium">Aktivite</span>
-            </div>
-            <p className="text-2xl font-bold text-white">
-              {logs.length}
-              {activeTimers.length > 0 && isToday && (
-                <span className="text-sm text-primary-400 ml-1">+{activeTimers.length} aktif</span>
-              )}
+      {/* ── Hero stat card ────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 p-5">
+        {/* decorative circles */}
+        <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-white/5" />
+        <div className="absolute -bottom-8 -right-2 w-20 h-20 rounded-full bg-white/5" />
+
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className="text-primary-200 text-xs font-medium uppercase tracking-widest mb-1">
+              {isToday ? 'Bugün toplam' : 'Toplam süre'}
             </p>
-          </CardContent>
-        </Card>
+            {totalMinutes > 0 ? (
+              <p className="text-4xl font-bold text-white">
+                {hours > 0 && <span>{hours}<span className="text-2xl font-semibold text-primary-200">s </span></span>}
+                {mins > 0 && <span>{mins}<span className="text-2xl font-semibold text-primary-200">d</span></span>}
+                {totalMinutes === 0 && '0d'}
+              </p>
+            ) : (
+              <p className="text-4xl font-bold text-white/40">—</p>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            {avgMood && (
+              <div className="bg-white/15 rounded-xl px-3 py-1.5 text-center">
+                <p className="text-xl">{getMoodEmoji(avgMood)}</p>
+                <p className="text-primary-200 text-xs">Ortalama</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="relative flex items-center gap-4 mt-4 pt-3 border-t border-white/15">
+          <div>
+            <p className="text-2xl font-bold text-white">{logs.length}</p>
+            <p className="text-primary-200 text-xs">kayıt</p>
+          </div>
+          {isToday && activeTimers.length > 0 && (
+            <div>
+              <p className="text-2xl font-bold text-white">{activeTimers.length}</p>
+              <p className="text-primary-200 text-xs">aktif sayaç</p>
+            </div>
+          )}
+          {totalMinutes >= 60 && (
+            <div className="ml-auto flex items-center gap-1 text-yellow-300">
+              <Flame size={14} />
+              <span className="text-xs font-semibold">{formatDuration(totalMinutes)}</span>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Active Timers (today only) */}
+      {/* ── Active timers (today only) ─────────────────── */}
       {isToday && activeTimers.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-surface-300 mb-2 uppercase tracking-wider">Aktif Zamanlayıcılar</h2>
+        <section>
+          <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">
+            Aktif Sayaçlar
+          </h2>
           <ActiveTimers />
-        </div>
+        </section>
       )}
 
-      {/* Activity Summary Bar */}
+      {/* ── Activity breakdown ────────────────────────── */}
       {Object.keys(activityTotals).length > 0 && (
-        <div className="space-y-2">
+        <section className="bg-surface-800 border border-surface-700 rounded-2xl p-4 space-y-3">
+          <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
+            Aktivite Dağılımı
+          </h2>
           {Object.entries(activityTotals)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, mins]) => (
-              <div key={name}>
-                <div className="flex justify-between text-xs text-surface-400 mb-1">
-                  <span>{name}</span>
-                  <span>{formatDuration(mins)}</span>
+            .slice(0, 6)
+            .map(([name, mins]) => {
+              const pct = Math.round((mins / totalMinutes) * 100)
+              const color = getColor(name)
+              return (
+                <div key={name}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm text-surface-200 font-medium">{name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-surface-500">{pct}%</span>
+                      <span className="text-xs font-semibold text-surface-300 w-12 text-right">
+                        {formatDuration(mins)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-2 bg-surface-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{ width: `${pct}%`, backgroundColor: color }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all"
-                    style={{
-                      width: `${Math.min(100, (mins / totalMinutes) * 100)}%`,
-                      backgroundColor: getColor(name),
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-        </div>
+              )
+            })}
+        </section>
       )}
 
-      {/* Log List */}
-      <div>
-        <h2 className="text-sm font-semibold text-surface-300 mb-2 uppercase tracking-wider">
-          {isToday ? "Bugünün Kayıtları" : "Kayıtlar"}
+      {/* ── Log list ──────────────────────────────────── */}
+      <section>
+        <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">
+          {isToday ? 'Bugünün Kayıtları' : 'Kayıtlar'}
         </h2>
+
         {logs.length === 0 ? (
-          <div className="text-center py-12 text-surface-500">
-            <Clock size={40} className="mx-auto mb-3 opacity-50" />
-            <p className="text-sm">Henüz kayıt yok</p>
-            <p className="text-xs mt-1">Zamanlayıcı başlatın veya manuel kayıt ekleyin</p>
+          <div className="flex flex-col items-center justify-center py-14 text-center">
+            <div className="w-16 h-16 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-4">
+              <Clock size={28} className="text-surface-600" />
+            </div>
+            <p className="font-medium text-surface-400">Henüz kayıt yok</p>
+            <p className="text-xs text-surface-600 mt-1">
+              {isToday
+                ? 'Takip sekmesinden zamanlayıcı başlat'
+                : 'Bu gün için kayıt bulunmuyor'}
+            </p>
           </div>
         ) : (
           <div className="space-y-2">
             {logs.map(log => <LogCard key={log.id} log={log} />)}
           </div>
         )}
-      </div>
+      </section>
     </div>
   )
 }
