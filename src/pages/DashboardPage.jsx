@@ -1,10 +1,17 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Clock, Flame, CalendarDays } from 'lucide-react'
+import {
+  ChevronLeft, ChevronRight, Clock, Flame, CalendarDays,
+  Play, Plus, Zap, Check,
+} from 'lucide-react'
 import { format, addDays, subDays, parseISO } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { useApp } from '../context/AppContext'
 import { ActiveTimers } from '../components/timer/ActiveTimer'
 import { LogCard } from '../components/logs/LogCard'
+import { Modal } from '../components/ui/Modal'
+import { ActivitySearch } from '../components/ui/ActivitySearch'
+import { MoodPicker } from '../components/ui/MoodPicker'
+import { Input } from '../components/ui/Input'
 import { formatDuration, todayString } from '../lib/utils'
 import { CATEGORY_COLORS, PRESET_ACTIVITIES, MOOD_OPTIONS } from '../lib/constants'
 
@@ -13,8 +20,215 @@ function getColor(name) {
   return CATEGORY_COLORS[preset?.category] ?? CATEGORY_COLORS.custom
 }
 
+function getEmoji(name) {
+  return PRESET_ACTIVITIES.find(p => p.name.toLowerCase() === name?.toLowerCase())?.emoji ?? '📌'
+}
+
 function getMoodEmoji(value) {
   return MOOD_OPTIONS.find(m => m.value === value)?.emoji ?? ''
+}
+
+const QUICK_CHIPS = [
+  'Çalışma', 'Spor', 'Kitap Okuma', 'Koşu',
+  'Sosyal Medya', 'Ders Çalışma',
+]
+
+function QuickEntry({ onTimerStarted }) {
+  const { startTimer, addManualLog, activeTimers, activities } = useApp()
+  const [starting, setStarting] = useState(null)
+  const [started, setStarted] = useState(null)
+  const [showManual, setShowManual] = useState(false)
+
+  const [manualActivity, setManualActivity] = useState('')
+  const [manualDuration, setManualDuration] = useState('')
+  const [manualMood, setManualMood] = useState(null)
+  const [manualNotes, setManualNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  async function quickStart(name) {
+    const db = activities.find(a => a.name === name)
+    const idOrName = db?.id || name
+
+    const alreadyRunning = activeTimers.some(t =>
+      t.activities?.name === name || t.activity_id === idOrName
+    )
+    if (alreadyRunning) return
+
+    setStarting(name)
+    try {
+      await startTimer(idOrName)
+      setStarted(name)
+      setTimeout(() => setStarted(null), 1500)
+      onTimerStarted?.()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setStarting(null)
+    }
+  }
+
+  function isRunning(name) {
+    return activeTimers.some(t => t.activities?.name === name)
+  }
+
+  async function handleManualSubmit(e) {
+    e.preventDefault()
+    if (!manualActivity || !manualDuration) return
+    setSaving(true)
+    try {
+      await addManualLog({
+        activityIdOrName: manualActivity,
+        date: todayString(),
+        durationMinutes: parseInt(manualDuration),
+        mood: manualMood,
+        notes: manualNotes,
+      })
+      setManualActivity('')
+      setManualDuration('')
+      setManualMood(null)
+      setManualNotes('')
+      setSaved(true)
+      setTimeout(() => { setSaved(false); setShowManual(false) }, 1200)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <section className="bg-surface-800 border border-surface-700 rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Zap size={14} className="text-amber-400" />
+            <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">Hızlı Giriş</h2>
+          </div>
+          <button
+            onClick={() => setShowManual(true)}
+            className="flex items-center gap-1 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
+          >
+            <Plus size={12} />
+            Manuel Ekle
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          {QUICK_CHIPS.map(name => {
+            const running = isRunning(name)
+            const isStarting = starting === name
+            const justStarted = started === name
+            const emoji = getEmoji(name)
+            const color = getColor(name)
+
+            return (
+              <button
+                key={name}
+                onClick={() => quickStart(name)}
+                disabled={running || isStarting}
+                className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                style={{
+                  borderColor: running ? `${color}60` : justStarted ? '#10b98160' : '#334155',
+                  backgroundColor: running ? `${color}15` : justStarted ? '#10b98115' : 'transparent',
+                }}
+              >
+                <span className="text-lg">{justStarted ? '✓' : emoji}</span>
+                <span className="text-[11px] font-medium text-surface-300 leading-tight text-center truncate w-full">
+                  {name}
+                </span>
+                {running && (
+                  <span className="flex items-center gap-0.5 text-[9px] font-semibold" style={{ color }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />
+                    Aktif
+                  </span>
+                )}
+                {!running && !justStarted && (
+                  <Play size={10} className="text-surface-500" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Manual entry modal */}
+      <Modal open={showManual} onClose={() => setShowManual(false)} title="Manuel Kayıt">
+        <form onSubmit={handleManualSubmit} className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Aktivite</p>
+            <ActivitySearch
+              value={manualActivity}
+              onChange={setManualActivity}
+              placeholder="Aktivite seç veya yaz..."
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Süre</p>
+            <div className="relative">
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                placeholder="örn. 45"
+                value={manualDuration}
+                onChange={e => setManualDuration(e.target.value)}
+                className="w-full bg-surface-700 border border-surface-600 rounded-xl px-4 py-3 text-white placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 text-lg font-semibold pr-20"
+              />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-surface-400 font-medium">
+                dakika
+              </span>
+            </div>
+            {manualDuration && (
+              <p className="text-xs text-surface-500 mt-1 ml-1">
+                = {formatDuration(parseInt(manualDuration) || 0)}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Ruh Hali</p>
+            <MoodPicker value={manualMood} onChange={setManualMood} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold text-surface-400 uppercase tracking-widest mb-2">Not (isteğe bağlı)</p>
+            <textarea
+              value={manualNotes}
+              onChange={e => setManualNotes(e.target.value)}
+              placeholder="Bu aktivite hakkında..."
+              rows={2}
+              className="w-full bg-surface-700 border border-surface-600 rounded-xl px-4 py-3 text-white placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setShowManual(false)}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold text-surface-300 bg-surface-700 hover:bg-surface-600 transition-all"
+            >
+              İptal
+            </button>
+            <button
+              type="submit"
+              disabled={!manualActivity || !manualDuration || saving}
+              className="flex-1 py-3 rounded-xl text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
+              style={{
+                background: saved
+                  ? 'linear-gradient(135deg,#10b981,#059669)'
+                  : 'linear-gradient(135deg,#22c55e,#16a34a)',
+                boxShadow: '0 4px 20px rgba(34,197,94,0.25)',
+              }}
+            >
+              {saved ? '✓ Kaydedildi!' : saving ? 'Kaydediliyor...' : 'Kaydet'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  )
 }
 
 export function DashboardPage() {
@@ -85,7 +299,6 @@ export function DashboardPage() {
 
       {/* ── Hero stat card ────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 p-5">
-        {/* decorative circles */}
         <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-white/5" />
         <div className="absolute -bottom-8 -right-2 w-20 h-20 rounded-full bg-white/5" />
 
@@ -134,6 +347,9 @@ export function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* ── Quick entry (today only) ──────────────────── */}
+      {isToday && <QuickEntry />}
 
       {/* ── Active timers (today only) ─────────────────── */}
       {isToday && activeTimers.length > 0 && (
@@ -194,7 +410,7 @@ export function DashboardPage() {
             <p className="font-medium text-surface-400">Henüz kayıt yok</p>
             <p className="text-xs text-surface-600 mt-1">
               {isToday
-                ? 'Takip sekmesinden zamanlayıcı başlat'
+                ? 'Yukarıdan hızlıca bir aktivite başlat'
                 : 'Bu gün için kayıt bulunmuyor'}
             </p>
           </div>
