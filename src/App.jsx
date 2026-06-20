@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from './context/AuthContext'
 import { useApp } from './context/AppContext'
 import { DashboardPage } from './pages/DashboardPage'
@@ -6,7 +6,35 @@ import { TimerPage } from './pages/TimerPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { BottomNav } from './components/layout/BottomNav'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, WifiOff, X } from 'lucide-react'
+
+function OfflineBanner() {
+  const [offline, setOffline] = useState(!navigator.onLine)
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    const goOffline = () => setOffline(true)
+    const goOnline = () => { setOffline(false); setDismissed(false) }
+    window.addEventListener('offline', goOffline)
+    window.addEventListener('online', goOnline)
+    return () => {
+      window.removeEventListener('offline', goOffline)
+      window.removeEventListener('online', goOnline)
+    }
+  }, [])
+
+  if (!offline || dismissed) return null
+
+  return (
+    <div className="bg-amber-500/15 border-b border-amber-500/25 px-4 py-2.5 flex items-center gap-2.5">
+      <WifiOff size={14} className="text-amber-400 shrink-0" />
+      <p className="text-xs text-amber-200 flex-1">Çevrimdışısınız. Verileriniz senkronize edilemedi.</p>
+      <button onClick={() => setDismissed(true)} className="text-amber-400/60 hover:text-amber-300 shrink-0">
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
 
 function AppShell() {
   const [tab, setTab] = useState('dashboard')
@@ -28,7 +56,9 @@ function AppShell() {
 
   return (
     <div className="flex flex-col min-h-dvh max-w-md mx-auto">
-      <header className="sticky top-0 z-30 bg-surface-900/95 backdrop-blur-md border-b border-surface-700 px-4 py-2.5 flex items-center justify-between">
+      <div className="sticky top-0 z-30">
+        <OfflineBanner />
+        <header className="bg-surface-900/95 backdrop-blur-md border-b border-surface-700 px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <img src="/logo.png" alt="Life Tracker" className="w-8 h-8 object-contain" />
           <h1 className="font-semibold text-white text-base">{titles[tab]}</h1>
@@ -38,7 +68,8 @@ function AppShell() {
             </span>
           )}
         </div>
-      </header>
+        </header>
+      </div>
 
       <main className="flex-1 overflow-y-auto px-4 py-4 pb-24 scrollbar-hide">
         {pages[tab]}

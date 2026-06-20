@@ -7,12 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'logo.png'],
+      includeAssets: ['favicon.svg', 'favicon-96x96.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'Life Tracker',
-        short_name: 'LifeTrack',
-        description: 'Track your daily activities, moods, and goals',
-        theme_color: '#0ea5e9',
+        short_name: 'LifeTracker',
+        description: 'Günlük aktivitelerini, sürelerini ve ruh halini takip et',
+        theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
@@ -33,36 +33,41 @@ export default defineConfig({
             src: 'pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable',
-          },
-        ],
-        shortcuts: [
-          {
-            name: 'Start Timer',
-            short_name: 'Timer',
-            description: 'Start tracking an activity',
-            url: '/timer',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
-          },
-          {
-            name: 'Dashboard',
-            short_name: 'Today',
-            description: "View today's activity",
-            url: '/',
-            icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
+            purpose: 'maskable',
           },
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-cache',
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
+              cacheName: 'supabase-api',
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
+              networkTimeoutSeconds: 10,
             },
+          },
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/auth\/.*/i,
+            handler: 'NetworkOnly',
           },
         ],
       },
