@@ -1,13 +1,19 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseConfigured } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [configError, setConfigError] = useState(!supabaseConfigured)
 
   useEffect(() => {
+    if (!supabaseConfigured) {
+      setLoading(false)
+      return
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
@@ -38,7 +44,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, configError, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   )

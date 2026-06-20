@@ -7,7 +7,7 @@ import { TimerPage } from './pages/TimerPage'
 import { GoalsPage } from './pages/GoalsPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { BottomNav } from './components/layout/BottomNav'
-import { LogOut, Clock } from 'lucide-react'
+import { LogOut, Clock, AlertTriangle } from 'lucide-react'
 
 function AppShell() {
   const [tab, setTab] = useState('dashboard')
@@ -62,6 +62,25 @@ function AppShell() {
   )
 }
 
+function ConfigErrorScreen() {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-surface-900 px-6">
+      <div className="text-center max-w-sm">
+        <div className="w-16 h-16 bg-red-500/15 border border-red-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={32} className="text-red-400" />
+        </div>
+        <h1 className="text-xl font-bold text-white mb-2">Yapılandırma Eksik</h1>
+        <p className="text-surface-400 text-sm leading-relaxed">
+          Supabase ortam değişkenleri bulunamadı. Vercel Dashboard &rarr; Settings &rarr; Environment Variables bölümünden
+          <code className="text-primary-400 mx-1 text-xs bg-surface-800 px-1.5 py-0.5 rounded">VITE_SUPABASE_URL</code> ve
+          <code className="text-primary-400 mx-1 text-xs bg-surface-800 px-1.5 py-0.5 rounded">VITE_SUPABASE_ANON_KEY</code>
+          değişkenlerini ekleyin ve tekrar deploy edin.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function LoadingScreen() {
   return (
     <div className="min-h-dvh flex items-center justify-center bg-surface-900">
@@ -76,8 +95,9 @@ function LoadingScreen() {
 }
 
 export default function App() {
-  const { user, loading } = useAuth()
+  const { user, loading, configError } = useAuth()
 
+  if (configError) return <ConfigErrorScreen />
   if (loading) return <LoadingScreen />
   if (!user) return <AuthPage />
   return <AppShell />
