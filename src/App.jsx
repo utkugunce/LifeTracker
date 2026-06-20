@@ -79,10 +79,32 @@ function LoadingScreen() {
   )
 }
 
+function AuthErrorScreen({ message }) {
+  return (
+    <div className="min-h-dvh flex items-center justify-center bg-surface-900 px-6">
+      <div className="text-center max-w-sm">
+        <div className="w-16 h-16 bg-orange-500/15 border border-orange-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={32} className="text-orange-400" />
+        </div>
+        <h1 className="text-xl font-bold text-white mb-2">Giriş Yapılamadı</h1>
+        <p className="text-surface-400 text-sm leading-relaxed">{message}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-5 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-primary-500 hover:bg-primary-600 transition-colors"
+        >
+          Tekrar Dene
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
-  const { user, loading, configError } = useAuth()
+  const { user, loading, configError, authError } = useAuth()
 
   if (configError) return <ConfigErrorScreen />
-  if (loading || !user) return <LoadingScreen />
+  if (loading) return <LoadingScreen />
+  if (authError) return <AuthErrorScreen message={authError} />
+  if (!user) return <LoadingScreen />
   return <AppShell />
 }
