@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   ChevronLeft, ChevronRight, Clock, Flame, CalendarDays,
-  Play, Plus, Zap, Check,
+  Play, Plus, Zap, Sun, Moon, Sunrise, Sunset,
 } from 'lucide-react'
-import { format, addDays, subDays, parseISO } from 'date-fns'
+import { format, addDays, subDays, parseISO, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { useApp } from '../context/AppContext'
 import { ActiveTimers } from '../components/timer/ActiveTimer'
@@ -11,7 +11,6 @@ import { LogCard } from '../components/logs/LogCard'
 import { Modal } from '../components/ui/Modal'
 import { ActivitySearch } from '../components/ui/ActivitySearch'
 import { MoodPicker } from '../components/ui/MoodPicker'
-import { Input } from '../components/ui/Input'
 import { formatDuration, todayString } from '../lib/utils'
 import { CATEGORY_COLORS, PRESET_ACTIVITIES, MOOD_OPTIONS } from '../lib/constants'
 
@@ -20,23 +19,28 @@ function getColor(name) {
   return CATEGORY_COLORS[preset?.category] ?? CATEGORY_COLORS.custom
 }
 
-function getEmoji(name) {
-  return PRESET_ACTIVITIES.find(p => p.name.toLowerCase() === name?.toLowerCase())?.emoji ?? '📌'
-}
-
 function getMoodEmoji(value) {
   return MOOD_OPTIONS.find(m => m.value === value)?.emoji ?? ''
 }
 
-const QUICK_CHIPS = [
-  'Çalışma', 'Spor', 'Kitap Okuma', 'Koşu',
-  'Sosyal Medya', 'Ders Çalışma',
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 6) return { text: 'İyi Geceler!', sub: 'Geç saatlere kadar mı çalışıyorsun?', Icon: Moon }
+  if (h < 12) return { text: 'Günaydın!', sub: 'Bugün nasıl gidiyor?', Icon: Sunrise }
+  if (h < 18) return { text: 'İyi Günler!', sub: 'Bugün nasıl gidiyor?', Icon: Sun }
+  return { text: 'İyi Akşamlar!', sub: 'Bugün nasıl geçti?', Icon: Sunset }
+}
+
+const QUICK_SHORTCUTS = [
+  { name: 'Çalışma', emoji: '💼' },
+  { name: 'Spor', emoji: '🏋️' },
+  { name: 'Kitap Okuma', emoji: '📚' },
+  { name: 'Koşu', emoji: '🏃' },
 ]
 
-function QuickEntry({ onTimerStarted }) {
-  const { startTimer, addManualLog, activeTimers, activities } = useApp()
+function QuickEntryCard() {
+  const { startTimer, addManualLog, activeTimers, activities, logs } = useApp()
   const [starting, setStarting] = useState(null)
-  const [started, setStarted] = useState(null)
   const [showManual, setShowManual] = useState(false)
 
   const [manualActivity, setManualActivity] = useState('')
@@ -46,25 +50,34 @@ function QuickEntry({ onTimerStarted }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const greeting = getGreeting()
+  const GIcon = greeting.Icon
+
+  const now = new Date()
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+  const weekEnd = endOfWeek(now, { weekStartsOn: 1 })
+  const weekMinutes = useMemo(() =>
+    logs
+      .filter(l => {
+        if (!l.duration_minutes) return false
+        try { return isWithinInterval(parseISO(l.log_date), { start: weekStart, end: weekEnd }) }
+        catch { return false }
+      })
+      .reduce((s, l) => s + (l.duration_minutes || 0), 0),
+    [logs, weekStart.getTime()]
+  )
+
   async function quickStart(name) {
     const db = activities.find(a => a.name === name)
     const idOrName = db?.id || name
-
-    const alreadyRunning = activeTimers.some(t =>
-      t.activities?.name === name || t.activity_id === idOrName
-    )
-    if (alreadyRunning) return
-
+    if (activeTimers.some(t => t.activities?.name === name || t.activity_id === idOrName)) return
     setStarting(name)
     try {
       await startTimer(idOrName)
-      setStarted(name)
-      setTimeout(() => setStarted(null), 1500)
-      onTimerStarted?.()
     } catch (e) {
       console.error(e)
     } finally {
-      setStarting(null)
+      setTimeout(() => setStarting(null), 600)
     }
   }
 
@@ -99,58 +112,78 @@ function QuickEntry({ onTimerStarted }) {
 
   return (
     <>
-      <section className="bg-surface-800 border border-surface-700 rounded-2xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Zap size={14} className="text-amber-400" />
-            <h2 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">Hızlı Giriş</h2>
+      <div className="relative overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #a855f7 100%)' }}>
+        {/* Decorative blobs */}
+        <div className="absolute -top-10 -right-10 w-32 h-32 rounded-full bg-white/10" />
+        <div className="absolute top-8 -right-4 w-20 h-20 rounded-full bg-white/5" />
+        <div className="absolute -bottom-6 -left-6 w-24 h-24 rounded-full bg-black/10" />
+
+        <div className="relative p-5">
+          {/* Greeting */}
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-white">{greeting.text}</h2>
+              <p className="text-white/60 text-sm mt-0.5">{greeting.sub}</p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center">
+              <GIcon size={20} className="text-white/80" />
+            </div>
           </div>
-          <button
-            onClick={() => setShowManual(true)}
-            className="flex items-center gap-1 text-xs font-medium text-primary-400 hover:text-primary-300 transition-colors"
-          >
-            <Plus size={12} />
-            Manuel Ekle
-          </button>
-        </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          {QUICK_CHIPS.map(name => {
-            const running = isRunning(name)
-            const isStarting = starting === name
-            const justStarted = started === name
-            const emoji = getEmoji(name)
-            const color = getColor(name)
+          {/* Week stat pill */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2">
+              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">Bu Hafta</p>
+              <p className="text-lg font-bold text-white leading-tight">{formatDuration(weekMinutes)}</p>
+            </div>
+            <div className="bg-white/15 backdrop-blur-sm rounded-xl px-3.5 py-2">
+              <p className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">Aktif</p>
+              <p className="text-lg font-bold text-white leading-tight">
+                {activeTimers.length > 0 ? `${activeTimers.length} sayaç` : '—'}
+              </p>
+            </div>
+          </div>
 
-            return (
-              <button
-                key={name}
-                onClick={() => quickStart(name)}
-                disabled={running || isStarting}
-                className="flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                style={{
-                  borderColor: running ? `${color}60` : justStarted ? '#10b98160' : '#334155',
-                  backgroundColor: running ? `${color}15` : justStarted ? '#10b98115' : 'transparent',
-                }}
-              >
-                <span className="text-lg">{justStarted ? '✓' : emoji}</span>
-                <span className="text-[11px] font-medium text-surface-300 leading-tight text-center truncate w-full">
-                  {name}
-                </span>
-                {running && (
-                  <span className="flex items-center gap-0.5 text-[9px] font-semibold" style={{ color }}>
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: color }} />
-                    Aktif
-                  </span>
-                )}
-                {!running && !justStarted && (
-                  <Play size={10} className="text-surface-500" />
-                )}
-              </button>
-            )
-          })}
+          {/* Quick start chips */}
+          <div className="flex gap-2 mb-3">
+            {QUICK_SHORTCUTS.map(({ name, emoji }) => {
+              const running = isRunning(name)
+              const isStarting = starting === name
+              return (
+                <button
+                  key={name}
+                  onClick={() => quickStart(name)}
+                  disabled={running || isStarting}
+                  className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl px-3 py-2 text-white text-xs font-semibold transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isStarting ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      {running
+                        ? <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                        : <Plus size={12} strokeWidth={3} />
+                      }
+                    </>
+                  )}
+                  <span>{name}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Bottom actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowManual(true)}
+              className="flex-1 flex items-center justify-center gap-1.5 bg-black/20 hover:bg-black/30 backdrop-blur-sm rounded-xl py-2.5 text-white/90 text-xs font-semibold transition-all active:scale-[0.98]"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+              Kayıt Ekle
+            </button>
+          </div>
         </div>
-      </section>
+      </div>
 
       {/* Manual entry modal */}
       <Modal open={showManual} onClose={() => setShowManual(false)} title="Manuel Kayıt">
@@ -297,6 +330,9 @@ export function DashboardPage() {
         </button>
       </div>
 
+      {/* ── Quick entry widget (today only) ───────────── */}
+      {isToday && <QuickEntryCard />}
+
       {/* ── Hero stat card ────────────────────────────── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-600 to-primary-800 p-5">
         <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full bg-white/5" />
@@ -347,9 +383,6 @@ export function DashboardPage() {
           )}
         </div>
       </div>
-
-      {/* ── Quick entry (today only) ──────────────────── */}
-      {isToday && <QuickEntry />}
 
       {/* ── Active timers (today only) ─────────────────── */}
       {isToday && activeTimers.length > 0 && (
