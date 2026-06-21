@@ -9,7 +9,7 @@ import {
   eachDayOfInterval, format, parseISO, isWithinInterval,
 } from 'date-fns'
 import { tr } from 'date-fns/locale'
-import { BarChart3, Clock, Smile, Trophy, TrendingUp } from 'lucide-react'
+import { BarChart3, Clock, Smile, Trophy, TrendingUp, Tag, Lightbulb, Download } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { formatDuration } from '../lib/utils'
 import { PRESET_ACTIVITIES, CATEGORY_COLORS, MOOD_OPTIONS } from '../lib/constants'
@@ -52,8 +52,83 @@ function ChartTooltip({ active, payload, label, type }) {
   )
 }
 
+function generateInsights(periodLogs, period, avgMood, topActivity, totalMinutes) {
+  const insights = []
+  if (!periodLogs.length) return insights
+
+  // Top activity insight
+  if (topActivity) {
+    const logsWithMood = periodLogs.filter(l => l.activity_id === topActivity.id && l.mood)
+    const actMoodAvg = logsWithMood.length
+      ? logsWithMood.reduce((s, l) => s + l.mood, 0) / logsWithMood.length
+      : null
+
+    if (actMoodAvg && actMoodAvg >= 4) {
+      insights.push({
+        emoji: '✨',
+        text: `${topActivity.emoji} ${topActivity.name} yaptığında ruh hali ortalaması ${actMoodAvg.toFixed(1)} — bu aktivite sana iyi geliyor!`,
+      })
+    } else {
+      insights.push({
+        emoji: '🏆',
+        text: `En çok zamanını ${topActivity.emoji} ${topActivity.name} aktivitesine harcadın (${formatDuration(topActivity.minutes)}).`,
+      })
+    }
+  }
+
+  // Total time insight
+  const periodLabel = period === 'weekly' ? 'bu hafta' : 'bu ay'
+  if (totalMinutes >= 600) {
+    insights.push({
+      emoji: '🔥',
+      text: `${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)} toplam ${formatDuration(totalMinutes)} takip ettin. Muhteşem bir odak!`,
+    })
+  } else if (totalMinutes >= 180) {
+    insights.push({
+      emoji: '💪',
+      text: `${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)} ${formatDuration(totalMinutes)} aktivite kaydın var. Güzel gidiyorsun!`,
+    })
+  } else {
+    insights.push({
+      emoji: '📈',
+      text: `${periodLabel.charAt(0).toUpperCase() + periodLabel.slice(1)} ${formatDuration(totalMinutes)} kayıt yaptın. Her gün biraz daha eklemek fark yaratır.`,
+    })
+  }
+
+  // Mood insight
+  if (avgMood !== null) {
+    if (avgMood >= 4) {
+      insights.push({
+        emoji: '😄',
+        text: `Ortalama ruh halin ${avgMood.toFixed(1)} — ${periodLabel} çok pozitif geçiyor!`,
+      })
+    } else if (avgMood >= 3) {
+      insights.push({
+        emoji: '😊',
+        text: `Ruh hali ortalaması ${avgMood.toFixed(1)} — dengeli bir dönem.`,
+      })
+    } else {
+      insights.push({
+        emoji: '💙',
+        text: `Ruh hali ortalaması ${avgMood.toFixed(1)} — kendine iyi bak, gerektiğinde mola ver.`,
+      })
+    }
+  }
+
+  // Variety insight
+  const uniqueActivities = new Set(periodLogs.map(l => l.activity_id)).size
+  if (uniqueActivities >= 5) {
+    insights.push({
+      emoji: '🎨',
+      text: `${uniqueActivities} farklı aktivite takip ettin — çok yönlü bir ${periodLabel === 'bu hafta' ? 'hafta' : 'ay'}!`,
+    })
+  }
+
+  return insights.slice(0, 3)
+}
+
 export function AnalyticsPage() {
-  const { logs } = useApp()
+  const { logs, exportData } = useApp()
   const [period, setPeriod] = useState('weekly')
 
   const now = new Date()
@@ -125,6 +200,22 @@ export function AnalyticsPage() {
       .slice(0, 8)
   }, [periodLogs])
 
+  // Tag distribution
+  const tagData = useMemo(() => {
+    const acc = {}
+    periodLogs.forEach(l => {
+      if (!Array.isArray(l.tags)) return
+      l.tags.forEach(tag => {
+        if (!tag) return
+        acc[tag] = (acc[tag] || 0) + (l.duration_minutes || 0)
+      })
+    })
+    return Object.entries(acc)
+      .map(([name, minutes]) => ({ name, minutes }))
+      .sort((a, b) => b.minutes - a.minutes)
+      .slice(0, 8)
+  }, [periodLogs])
+
   const moodLogs = periodLogs.filter(l => l.mood)
   const avgMood = moodLogs.length
     ? moodLogs.reduce((s, l) => s + l.mood, 0) / moodLogs.length
@@ -132,28 +223,43 @@ export function AnalyticsPage() {
 
   const topActivity = activityData[0] ?? null
 
+  const insights = useMemo(() =>
+    generateInsights(periodLogs, period, avgMood, topActivity, totalMinutes),
+    [periodLogs, period, avgMood, topActivity, totalMinutes]
+  )
+
   const hasData = totalMinutes > 0
 
   return (
     <div className="space-y-5">
-      {/* Period toggle */}
-      <div className="flex bg-surface-800 rounded-xl p-1 border border-surface-700">
-        {[
-          { value: 'weekly', label: 'Bu Hafta' },
-          { value: 'monthly', label: 'Bu Ay' },
-        ].map(p => (
-          <button
-            key={p.value}
-            onClick={() => setPeriod(p.value)}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
-              period === p.value
-                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
-                : 'text-surface-400 hover:text-surface-200'
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
+      {/* Period toggle + export */}
+      <div className="flex gap-2">
+        <div className="flex flex-1 bg-surface-800 rounded-xl p-1 border border-surface-700">
+          {[
+            { value: 'weekly', label: 'Bu Hafta' },
+            { value: 'monthly', label: 'Bu Ay' },
+          ].map(p => (
+            <button
+              key={p.value}
+              onClick={() => setPeriod(p.value)}
+              className={`flex-1 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                period === p.value
+                  ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20'
+                  : 'text-surface-400 hover:text-surface-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => exportData('csv')}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-800 border border-surface-700 text-surface-400 hover:text-surface-200 text-xs font-medium transition-all"
+          title="CSV olarak dışa aktar"
+        >
+          <Download size={13} />
+          CSV
+        </button>
       </div>
 
       {!hasData ? (
@@ -208,6 +314,26 @@ export function AnalyticsPage() {
               )}
             </div>
           </div>
+
+          {/* AI Insights */}
+          {insights.length > 0 && (
+            <div className="bg-gradient-to-br from-violet-500/10 to-primary-500/10 border border-violet-500/25 rounded-2xl overflow-hidden">
+              <div className="px-4 pt-4 pb-3 flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                  <Lightbulb size={13} className="text-violet-300" />
+                </div>
+                <h3 className="text-sm font-semibold text-violet-200">Akıllı Özet</h3>
+              </div>
+              <div className="px-4 pb-4 space-y-3">
+                {insights.map((ins, i) => (
+                  <div key={i} className="flex items-start gap-2.5">
+                    <span className="text-base shrink-0 mt-0.5">{ins.emoji}</span>
+                    <p className="text-xs text-surface-300 leading-relaxed">{ins.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Daily bar chart */}
           <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
@@ -279,6 +405,39 @@ export function AnalyticsPage() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Tag distribution */}
+          {tagData.length > 0 && (
+            <div className="bg-surface-800 border border-surface-700 rounded-2xl overflow-hidden">
+              <div className="px-4 pt-4 pb-2 flex items-center gap-2">
+                <Tag size={14} className="text-amber-400" />
+                <h3 className="text-sm font-semibold text-surface-200">Etiket Dağılımı</h3>
+              </div>
+              <div className="px-4 pb-4 space-y-2.5">
+                {tagData.map((item, i) => {
+                  const maxMinutes = tagData[0].minutes
+                  const pct = Math.round((item.minutes / maxMinutes) * 100)
+                  return (
+                    <div key={item.name} className="flex items-center gap-3">
+                      <span className="text-xs text-primary-300 font-medium w-28 shrink-0 truncate">{item.name}</span>
+                      <div className="flex-1 h-2 bg-surface-700 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${pct}%`,
+                            backgroundColor: PIE_COLORS[i % PIE_COLORS.length],
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-surface-400 tabular-nums w-14 text-right shrink-0">
+                        {formatDuration(item.minutes)}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

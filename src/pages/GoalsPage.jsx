@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import {
   Plus, Target, AlertTriangle, CheckCircle2, Trash2,
-  TrendingUp, ShieldAlert, Calendar, Clock, X,
+  TrendingUp, ShieldAlert, Calendar, Clock, Flame, Lock,
 } from 'lucide-react'
 import { startOfWeek, startOfMonth, parseISO, isWithinInterval, endOfWeek, endOfMonth } from 'date-fns'
 import { useApp } from '../context/AppContext'
@@ -51,6 +51,118 @@ function calcProgress(goal, logs) {
   }
 
   return { spent, target, pct, isLimit, exceeded, achieved, barColor }
+}
+
+function StreakWidget({ streak }) {
+  if (!streak) return null
+
+  const { current_streak, longest_streak } = streak
+
+  if (current_streak === 0) {
+    return (
+      <div className="bg-surface-800 border border-surface-700 rounded-2xl p-4 flex items-center gap-3">
+        <div className="w-11 h-11 rounded-xl bg-surface-700 flex items-center justify-center">
+          <Flame size={22} className="text-surface-500" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-surface-300">Seri Başlat</p>
+          <p className="text-xs text-surface-500 mt-0.5">Bugün bir aktivite ekle ve serine başla!</p>
+        </div>
+      </div>
+    )
+  }
+
+  const streakColor = current_streak >= 30 ? '#f59e0b' : current_streak >= 7 ? '#f97316' : '#0ea5e9'
+  const streakBg = current_streak >= 30 ? '#f59e0b18' : current_streak >= 7 ? '#f9731618' : '#0ea5e918'
+
+  return (
+    <div
+      className="rounded-2xl p-4 border"
+      style={{ backgroundColor: streakBg, borderColor: `${streakColor}30` }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
+            style={{ backgroundColor: `${streakColor}20` }}
+          >
+            🔥
+          </div>
+          <div>
+            <p className="text-base font-bold text-white">
+              {current_streak} Günlük Seride
+              {current_streak >= 7 ? 'sin!' : '!'}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: streakColor }}>
+              {current_streak >= 30
+                ? 'Efsanevi performans! 🏆'
+                : current_streak >= 14
+                ? 'İnanılmaz tutarlılık! ⭐'
+                : current_streak >= 7
+                ? 'Haftalık seri tamamlandı! 💪'
+                : 'Devam et, harika gidiyorsun!'}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-surface-500">En uzun</p>
+          <p className="text-base font-bold" style={{ color: streakColor }}>{longest_streak}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BadgeGallery({ badges, userBadges }) {
+  if (!badges || badges.length === 0) return null
+
+  const unlockedIds = new Set(userBadges.map(ub => ub.badge_id))
+
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-sm">🏆</span>
+        <h3 className="text-xs font-semibold text-surface-400 uppercase tracking-widest">
+          Rozetler ({userBadges.length}/{badges.length})
+        </h3>
+      </div>
+      <div className="grid grid-cols-3 gap-2.5">
+        {badges.map(badge => {
+          const unlocked = unlockedIds.has(badge.id)
+          const unlockedAt = userBadges.find(ub => ub.badge_id === badge.id)?.unlocked_at
+
+          return (
+            <div
+              key={badge.id}
+              className={`rounded-2xl p-3.5 flex flex-col items-center text-center border transition-all ${
+                unlocked
+                  ? 'bg-gradient-to-b from-amber-500/15 to-amber-500/5 border-amber-500/30'
+                  : 'bg-surface-800 border-surface-700 opacity-50'
+              }`}
+            >
+              <span className={`text-3xl mb-2 ${unlocked ? '' : 'grayscale'}`}>
+                {badge.icon}
+              </span>
+              {!unlocked && (
+                <Lock size={12} className="text-surface-500 mb-1.5" />
+              )}
+              <p className={`text-xs font-semibold leading-tight ${unlocked ? 'text-amber-200' : 'text-surface-500'}`}>
+                {badge.name}
+              </p>
+              {unlocked && unlockedAt && (
+                <p className="text-[10px] text-amber-400/60 mt-1">
+                  {new Date(unlockedAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
+                </p>
+              )}
+              {!unlocked && (
+                <p className="text-[10px] text-surface-600 mt-1 leading-tight">{badge.description}</p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
 }
 
 function GoalCard({ goal, logs, onDelete }) {
@@ -365,7 +477,7 @@ function AddGoalModal({ open, onClose, onSave }) {
 }
 
 export function GoalsPage() {
-  const { goals, logs, addGoal, deleteGoal } = useApp()
+  const { goals, logs, addGoal, deleteGoal, generalStreak, badges, userBadges } = useApp()
   const [adding, setAdding] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
 
@@ -381,7 +493,7 @@ export function GoalsPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">Hedefler & Limitler</h2>
+        <h2 className="text-lg font-bold text-white">Hedefler & Gelişim</h2>
         <button
           onClick={() => setAdding(true)}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
@@ -395,8 +507,16 @@ export function GoalsPage() {
         </button>
       </div>
 
+      {/* Streak widget */}
+      <StreakWidget streak={generalStreak} />
+
+      {/* Badge gallery */}
+      {badges.length > 0 && (
+        <BadgeGallery badges={badges} userBadges={userBadges} />
+      )}
+
       {goals.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="flex flex-col items-center justify-center py-12 text-center">
           <div className="w-20 h-20 rounded-2xl bg-surface-800 border border-surface-700 flex items-center justify-center mb-5">
             <Target size={36} className="text-surface-600" />
           </div>

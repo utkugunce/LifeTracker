@@ -8,6 +8,30 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { BottomNav } from './components/layout/BottomNav'
 import { AlertTriangle, WifiOff, X } from 'lucide-react'
 
+function BadgeToast() {
+  const { newBadge, dismissNewBadge } = useApp()
+  if (!newBadge) return null
+
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-sm">
+      <div className="bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-2xl backdrop-blur-md">
+        <span className="text-3xl shrink-0">{newBadge.icon}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-amber-300 uppercase tracking-wider">Rozet Kazandın! 🏆</p>
+          <p className="text-sm font-bold text-white mt-0.5">{newBadge.name}</p>
+          <p className="text-xs text-surface-400 mt-0.5 truncate">{newBadge.description}</p>
+        </div>
+        <button
+          onClick={dismissNewBadge}
+          className="text-surface-400 hover:text-surface-200 shrink-0 p-1"
+        >
+          <X size={14} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function OfflineBanner() {
   const [offline, setOffline] = useState(!navigator.onLine)
   const [dismissed, setDismissed] = useState(false)
@@ -76,6 +100,7 @@ function AppShell() {
       </main>
 
       <BottomNav active={tab} onChange={setTab} />
+      <BadgeToast />
     </div>
   )
 }
